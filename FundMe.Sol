@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.8;
+
+error NotOwner();
+
+contract FundMe {
+    mapping(address => uint256) public addressToAmountFunded;
+    address[] public funders;
+    mapping(address => bool) private alreadyFunder;
+    address public i_owner;
+    uint256 public constant MINIMUM_ETH = 0.1 ether;
+    address public newOwner;
+
+    constructor() {
+        i_owner = msg.sender;
+    }
+
+    function fund() public payable {
+        require(msg.value >= MINIMUM_ETH, "You need to spend more ETH!");
+        // Skip adding duplicate funders
+        if (!alreadyFunder[msg.sender]) {
+            addressToAmountFunded[msg.sender] += msg.value;
+            funders.push(msg.sender);
+            alreadyFunder[msg.sender] = true;
+        }
+    }
+
+    modifier onlyOwner() {
+        // require(msg.sender == owner);
+        if (msg.sender != i_owner) revert NotOwner();
+        _;
+    }
+
+    function transferOwnership(address _newOwner) public onlyOwner {
+        require(_newOwner != address(0), "Invalid new owner address");
+        newOwner = _newOwner;
+    }
+
+    function acceptNewOwnership() public {
+        require(msg.sender == newOwner, "Not the new owner");
+        i_owner = newOwner;
+        newOwner = address(0);
+    }
+
+    function withdraw() public onlyOwner {
+        for (
+            uint256 funderIndex = 0;
+            funderIndex < funders.length;
+            funderIndex++
+        ) {
+            address funder = funders[funderIndex];
+            addressToAmountFunded[funder] = 0;
+        }
+        funders = new address[](0);
+       
+        (bool callSuccess, ) = payable(msg.sender).call{
+            value: address(this).balance
+        }("");
+        require(callSuccess, "Call failed");
+    }
+
+
+    fallback() external payable {
+        fund();
+    }
+
+    receive() external payable {
+        fund();
+    }
+}
+
